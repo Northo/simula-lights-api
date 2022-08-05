@@ -9,3 +9,6 @@ TBW
 
 ## Usage
 TBW
+
+### Setting up cron job
+TBW
