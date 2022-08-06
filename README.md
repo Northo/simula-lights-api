@@ -33,3 +33,7 @@ or
 ```
 lights ROOM color 3
 ```
+
+## Credits
+
+The script is written by [minrk](https://github.com/minrk) and packaged by [finsberg](https://github.com/finsberg)
