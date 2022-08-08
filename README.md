@@ -1,6 +1,6 @@
 # Lights at KA23
 
-Command line tool for controlling the lights as KA23.
+Command line tool for controlling the lights at KA23.
 
 ## Install
 You can install the package with [`pipx`](https://github.com/pypa/pipx)
