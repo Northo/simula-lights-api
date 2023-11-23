@@ -12,6 +12,8 @@ selenium = "^4.15.2"
 click = "^8.1.7"
 numpy = "^1.26.2"
 pillow = "^10.1.0"
+fastapi = "^0.104.1"
+pydantic = "^2.5.2"
 
 
 [build-system]
