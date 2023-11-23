@@ -19,8 +19,10 @@ You can also specify brightness or color with a range 0-4:
 import sys
 from io import BytesIO
 import time
+from enum import Enum
+from typing import Optional
 
-import click
+import typer
 import numpy as np
 from PIL import Image
 from selenium import webdriver
@@ -117,13 +119,13 @@ def click_location(driver, location_name, index=None):
     action.perform()
 
 
-@click.command()
-@click.argument("room", type=int)
-@click.argument(
-    "button", type=click.Choice(list(locations)), default="reset", required=False
-)
-@click.argument("index", type=int, required=False)
-def lights(room: int, button: str = "reset", index: int | None = None):
+class Operation(str, Enum):
+    reset = "reset"
+    brightness = "brightness"
+    color = "color"
+
+
+def lights(room: int, button: Operation = Operation.reset, index: Optional[int] = None):
     """Interact with the lights for ROOM
 
     If only the room number is specified,
@@ -141,4 +143,4 @@ def lights(room: int, button: str = "reset", index: int | None = None):
 
 
 if __name__ == "__main__":
-    lights()
+    typer.run(lights)
