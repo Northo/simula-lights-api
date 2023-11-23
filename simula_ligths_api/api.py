@@ -14,7 +14,7 @@ class ColorValue(BaseModel):
     value: Annotated[int, Field(strict=True, ge=0, le=4)]  # Add validation for color format if necessary
 
 @app.post("/lights/{room}/brightness")
-async def set_brightness(room: str, brightness: BrightnessValue):
+async def set_brightness(room: int, brightness: BrightnessValue):
     # Implement brightness control logic
     lights(room=room, button="brightness", index=brightness)
     return {
@@ -25,7 +25,7 @@ async def set_brightness(room: str, brightness: BrightnessValue):
     }
 
 @app.post("/lights/{room}/color")
-async def set_color(room: str, color: ColorValue):
+async def set_color(room: int, color: ColorValue):
     # Implement color control logic
     lights(room=room, button="color", index=color)
     return {
