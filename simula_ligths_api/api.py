@@ -1,6 +1,7 @@
 from typing import Annotated
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
+from selenium.common.exceptions import TimeoutException, WebDriverException
 from pydantic import BaseModel, Field
 
 from simula_ligths_api.lights import lights
@@ -16,7 +17,10 @@ class ColorValue(BaseModel):
 @app.post("/lights/{room}/brightness")
 async def set_brightness(room: int, brightness: BrightnessValue):
     # Implement brightness control logic
-    lights(room=room, button="brightness", index=brightness)
+    try:
+        lights(room=room, button="brightness", index=brightness)
+    except (TimeoutException, WebDriverException) as e:
+        raise HTTPException(status_code=500, detail=str(e))
     return {
         "status": "success",
         "room": room,
