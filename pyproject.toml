@@ -6,6 +6,9 @@ authors = ["Thorvald Ballestad", "Henrik Finsberg", "Min RK"]
 readme = "README.md"
 packages = [{include = "simula_ligths_api"}]
 
+[tool.poetry.scripts]
+lights = 'simula_ligths_api.lights:app'
+
 [tool.poetry.dependencies]
 python = "^3.9"
 selenium = "^4.15.2"

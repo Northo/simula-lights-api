@@ -125,7 +125,9 @@ class Operation(str, Enum):
     brightness = "brightness"
     color = "color"
 
+app = typer.Typer()
 
+@app.command()
 def lights(room: int, button: Operation = Operation.reset, index: Optional[int] = None):
     """Interact with the lights for ROOM
 
@@ -144,4 +146,4 @@ def lights(room: int, button: Operation = Operation.reset, index: Optional[int] 
 
 
 if __name__ == "__main__":
-    typer.run(lights)
+    app()
