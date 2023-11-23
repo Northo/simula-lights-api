@@ -33,7 +33,7 @@ def setup_driver(url):
     """Connect to the light-control page"""
     print(f"Connecting to {url}")
     options = webdriver.ChromeOptions()
-    options.headless = True
+    options.add_argument("--headless=new")
     options.add_argument("window-size=500x500")
 
     driver = webdriver.Chrome(options=options)
