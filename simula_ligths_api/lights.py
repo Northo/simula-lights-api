@@ -37,6 +37,7 @@ def setup_driver(url):
     options.add_argument("window-size=500x500")
 
     driver = webdriver.Chrome(options=options)
+    driver.set_page_load_timeout(10)  # seconds
     driver.implicitly_wait(10)
     driver.get(url)
     return driver
