@@ -1,5 +1,6 @@
 # API and CLI for lights at KA23
 
+![Screenshot of API docs](docs/screenshot.png)
 
 ## Install
 
