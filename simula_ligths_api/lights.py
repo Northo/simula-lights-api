@@ -20,7 +20,7 @@ import sys
 from io import BytesIO
 import time
 from enum import Enum
-from typing import Optional
+from typing import Annotated, Optional
 
 import typer
 import numpy as np
@@ -125,10 +125,16 @@ class Operation(str, Enum):
     brightness = "brightness"
     color = "color"
 
+
 app = typer.Typer()
 
+
 @app.command()
-def lights(room: int, button: Operation = Operation.reset, index: Optional[int] = None):
+def lights(
+    room: int,
+    button: Annotated[Operation, typer.Argument()] = Operation.reset,
+    index: Annotated[Optional[int], typer.Argument()] = None,
+):
     """Interact with the lights for ROOM
 
     If only the room number is specified,
