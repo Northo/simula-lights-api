@@ -7,7 +7,7 @@ readme = "README.md"
 packages = [{include = "simula_ligths_api"}]
 
 [tool.poetry.dependencies]
-python = "^3.8"
+python = "^3.9"
 selenium = "^4.15.2"
 click = "^8.1.7"
 numpy = "^1.26.2"
