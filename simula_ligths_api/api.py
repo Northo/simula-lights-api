@@ -1,17 +1,22 @@
-from fastapi import FastAPI, HTTPException, Path
-from pydantic import BaseModel
+from typing import Annotated
+
+from fastapi import FastAPI
+from pydantic import BaseModel, Field
+
+from simula_ligths_api.lights import lights
 
 app = FastAPI()
 
 class BrightnessValue(BaseModel):
-    value: int  # Add validation for range if necessary
+    value: Annotated[int, Field(strict=True, ge=0, le=4)]  # Add validation for range if necessary
 
 class ColorValue(BaseModel):
-    value: str  # Add validation for color format if necessary
+    value: Annotated[int, Field(strict=True, ge=0, le=4)]  # Add validation for color format if necessary
 
 @app.post("/lights/{room}/brightness")
 async def set_brightness(room: str, brightness: BrightnessValue):
     # Implement brightness control logic
+    lights(room=room, button="brightness", index=brightness)
     return {
         "status": "success",
         "room": room,
@@ -22,6 +27,7 @@ async def set_brightness(room: str, brightness: BrightnessValue):
 @app.post("/lights/{room}/color")
 async def set_color(room: str, color: ColorValue):
     # Implement color control logic
+    lights(room=room, button="color", index=color)
     return {
         "status": "success",
         "room": room,
