@@ -2,12 +2,16 @@
 name = "simula-ligths-api"
 version = "0.1.0"
 description = ""
-authors = ["Thorvald Molthe Ballestad <thorvald@simula.no>"]
+authors = ["Thorvald Ballestad", "Henrik Finsberg", "Min RK"]
 readme = "README.md"
 packages = [{include = "simula_ligths_api"}]
 
 [tool.poetry.dependencies]
-python = "^3.12"
+python = "^3.8"
+selenium = "^4.15.2"
+click = "^8.1.7"
+numpy = "^1.26.2"
+pillow = "^10.1.0"
 
 
 [build-system]
