@@ -18,7 +18,7 @@ class ColorValue(BaseModel):
 async def set_brightness(room: int, brightness: BrightnessValue):
     # Implement brightness control logic
     try:
-        lights(room=room, button="brightness", index=brightness)
+        lights(room=room, button="brightness", index=brightness.value)
     except (TimeoutException, WebDriverException) as e:
         raise HTTPException(status_code=500, detail=str(e))
     return {
@@ -31,7 +31,7 @@ async def set_brightness(room: int, brightness: BrightnessValue):
 @app.post("/lights/{room}/color")
 async def set_color(room: int, color: ColorValue):
     # Implement color control logic
-    lights(room=room, button="color", index=color)
+    lights(room=room, button="color", index=color.value)
     return {
         "status": "success",
         "room": room,
