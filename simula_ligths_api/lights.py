@@ -94,7 +94,8 @@ def wait_for_page(driver):
 
 def click_location(driver, location_name, index=None):
     """Click a given location on the app"""
-    size = driver.get_window_size()
+    canvas = driver.find_element(by="id", value="foreground")
+    size = canvas.size
     loc_percent = locations[location_name]
     name = location_name
     if index is not None:
@@ -106,9 +107,8 @@ def click_location(driver, location_name, index=None):
     x = loc_percent[0] * size["width"]  # - canvas.location["x"]
     y = loc_percent[1] * size["height"]  # - canvas.location["y"]
 
-    print(f"Clicking {name}")
+    print(f"Clicking {name} ({loc_percent=})")
 
-    canvas = driver.find_element(by="id", value="background")
 
     actions = ActionChains(driver)
     # starts at center
