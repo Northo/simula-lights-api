@@ -7,43 +7,38 @@ You must give your office number as the first argument:
 
 With no other arguments, the lights are reset:
 
-lights.py ROOM
+    lights.py ROOM
 
 You can also specify brightness or color with a range 0-4:
 
     lights.py ROOM brightness 2
 
     lights.py ROOM color 3
-
 """
+
 import sys
-from io import BytesIO
 import time
 from enum import Enum
-from typing import Annotated, Optional
+from typing import Optional
+from io import BytesIO
 
 import typer
 import numpy as np
 from PIL import Image
-from selenium import webdriver
-from selenium.webdriver.common.action_chains import ActionChains
+from playwright.sync_api import sync_playwright
 
-
-def setup_driver(url):
-    """Connect to the light-control page"""
+def setup_page(url: str):
+    """Connect to the light-control page using Playwright"""
     print(f"Connecting to {url}")
-    options = webdriver.ChromeOptions()
-    options.add_argument("--headless=new")
-    options.add_argument("window-size=500x500")
+    playwright = sync_playwright().start()
+    browser = playwright.chromium.launch(headless=True)
+    # Create a new browser context with a fixed viewport size
+    context = browser.new_context(viewport={"width": 500, "height": 500})
+    page = context.new_page()
+    page.goto(url, timeout=10000)  # 10 seconds timeout
+    return page, browser, playwright
 
-    driver = webdriver.Chrome(options=options)
-    driver.set_page_load_timeout(10)  # seconds
-    driver.implicitly_wait(10)
-    driver.get(url)
-    return driver
-
-
-def room_url(room: int):
+def room_url(room: int) -> str:
     """Get the light control URL for a given office number"""
     if room < 300:
         ip = "172.16.4.61"
@@ -53,9 +48,7 @@ def room_url(room: int):
         ip = "172.16.4.63"
     return f"http://{ip}/webvisu/rom{room}.htm"
 
-
-# positions of buttons
-# positions are relative because they scale with the screen
+# Relative positions of buttons that scale with the screen size
 locations = {
     # brightness
     "reset": (0.5, 0.625),
@@ -63,93 +56,83 @@ locations = {
     "color": [(x, 0.9) for x in (0.1, 0.3, 0.5, 0.7, 0.9)],
 }
 
+def get_screen(page) -> np.ndarray:
+    """Get the current screen as an RGB numpy array"""
+    png = page.screenshot()
+    im = Image.open(BytesIO(png))
+    return np.asarray(im, dtype=np.uint8)[:, :, :3]  # drop any alpha channel
 
-def get_screen(driver):
-    """Get the current screen as an rgb numpy array"""
-    png = driver.get_screenshot_as_png()
-    im = Image.open(BytesIO(png), formats=["png"])
-    return np.asarray(im, dtype=np.uint8)[:, :, :3]  # rgba
-
-
-def wait_for_page(driver):
-    """Wait for the app to load
-
-    The loading screen is mostly white,
-    so wait for that to change.
-
-    Not sure if there's a better way to wait for a canvas app to load.
+def wait_for_page(page):
     """
-    # loading screen is mostly white (~74%)
-    white_fraction = 1
+    Wait for the app to load by checking the screenshot.
+    
+    The loading screen is mostly white, so wait until less than 50% of pixels are white.
+    """
+    white_fraction = 1.0
     print("Waiting for page to load...", end="")
     while white_fraction > 0.5:
-        screen = get_screen(driver)
+        screen = get_screen(page)
         white_fraction = (screen.mean(axis=2) == 255).mean()
         sys.stdout.write(".")
         sys.stdout.flush()
-        # print(f"Waiting for white screen to clear {white_fraction:.0%}")
         time.sleep(0.1)
     print("ok")
 
+def click_location(page, location_name: str, index: Optional[int] = None):
+    """Click a given location on the app using relative coordinates."""
+    canvas = page.query_selector("#foreground")
+    if not canvas:
+        print("Could not find the canvas element with id 'foreground'")
+        return
+    bounding_box = canvas.bounding_box()
+    if not bounding_box:
+        print("Could not get bounding box of the canvas element")
+        return
 
-def click_location(driver, location_name, index=None):
-    """Click a given location on the app"""
-    canvas = driver.find_element(by="id", value="foreground")
-    size = canvas.size
+    width = bounding_box["width"]
+    height = bounding_box["height"]
+
     loc_percent = locations[location_name]
     name = location_name
     if index is not None:
         loc_percent = loc_percent[index]
         name = f"{location_name}:{index}"
     elif isinstance(loc_percent, list):
-        # default to the middle
+        # default to the middle option
         loc_percent = loc_percent[2]
-    x = loc_percent[0] * size["width"]  # - canvas.location["x"]
-    y = loc_percent[1] * size["height"]  # - canvas.location["y"]
+    x = bounding_box["x"] + loc_percent[0] * width
+    y = bounding_box["y"] + loc_percent[1] * height
 
-    print(f"Clicking {name} ({loc_percent=})")
-
-
-    actions = ActionChains(driver)
-    # starts at center
-    action = actions.move_to_element(canvas)
-    # back to 0 (no absolute moves ?!)
-    action.move_by_offset(-canvas.size["width"] // 2, -canvas.size["height"] // 2)
-    action.move_by_offset(x, y)
-    action.click()
-    action.perform()
-
+    print(f"Clicking {name} (location percentages: {loc_percent})")
+    page.mouse.click(x, y)
 
 class Operation(str, Enum):
     reset = "reset"
     brightness = "brightness"
     color = "color"
 
-
 app = typer.Typer()
-
 
 @app.command()
 def lights(
     room: int,
-    button: Annotated[Operation, typer.Argument()] = Operation.reset,
-    index: Annotated[Optional[int], typer.Argument()] = None,
+    button: Operation = Operation.reset,
+    index: Optional[int] = None,
 ):
-    """Interact with the lights for ROOM
-
-    If only the room number is specified,
-    the brightness reset button is chosen.
-
-    For multi-value buttons (e.g. brightness, color),
-    an INDEX [0-4] can select which button.
     """
-    driver = setup_driver(room_url(room))
-    wait_for_page(driver)
-    click_location(driver, button, index)
-    # is there a condition to wait for??
-    # if we exit too early, the event doesn't register
-    time.sleep(1)
+    Interact with the lights for ROOM.
 
+    If only the room number is specified, the brightness reset button is chosen.
+    For multi-value buttons (e.g. brightness, color), an INDEX [0-4] can select which button.
+    """
+    page, browser, playwright = setup_page(room_url(room))
+    wait_for_page(page)
+    click_location(page, button, index)
+    # Allow time for the event to register before closing
+    time.sleep(1)
+    browser.close()
+    playwright.stop()
 
 if __name__ == "__main__":
     app()
+
