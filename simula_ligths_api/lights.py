@@ -1,45 +1,21 @@
-"""
-Usage:
-
-You must give your office number as the first argument:
-
-    lights.py ROOM
-
-With no other arguments, the lights are reset:
-
-    lights.py ROOM
-
-You can also specify brightness or color with a range 0-4:
-
-    lights.py ROOM brightness 2
-
-    lights.py ROOM color 3
-"""
-
 import sys
-import time
+import asyncio
+from contextlib import asynccontextmanager
 from enum import Enum
-from typing import Optional
 from io import BytesIO
+from typing import Optional, Tuple
 
 import typer
 import numpy as np
 from PIL import Image
-from playwright.sync_api import sync_playwright
+from playwright.async_api import async_playwright, TimeoutError, Error
 
-def setup_page(url: str):
-    """Connect to the light-control page using Playwright"""
-    print(f"Connecting to {url}")
-    playwright = sync_playwright().start()
-    browser = playwright.chromium.launch(headless=True)
-    # Create a new browser context with a fixed viewport size
-    context = browser.new_context(viewport={"width": 500, "height": 500})
-    page = context.new_page()
-    page.goto(url, timeout=10000)  # 10 seconds timeout
-    return page, browser, playwright
 
+# --------------------------
+# URL and Button Configurations
+# --------------------------
 def room_url(room: int) -> str:
-    """Get the light control URL for a given office number"""
+    """Return the light control URL for a given office number."""
     if room < 300:
         ip = "172.16.4.61"
     elif 300 <= room < 400:
@@ -48,45 +24,85 @@ def room_url(room: int) -> str:
         ip = "172.16.4.63"
     return f"http://{ip}/webvisu/rom{room}.htm"
 
-# Relative positions of buttons that scale with the screen size
+
+# Relative positions of buttons (scaling with screen dimensions)
 locations = {
-    # brightness
     "reset": (0.5, 0.625),
     "brightness": [(x, 0.7) for x in (0.1, 0.3, 0.5, 0.7, 0.9)],
     "color": [(x, 0.9) for x in (0.1, 0.3, 0.5, 0.7, 0.9)],
 }
 
-def get_screen(page) -> np.ndarray:
-    """Get the current screen as an RGB numpy array"""
-    png = page.screenshot()
-    im = Image.open(BytesIO(png))
-    return np.asarray(im, dtype=np.uint8)[:, :, :3]  # drop any alpha channel
 
-def wait_for_page(page):
+class Operation(str, Enum):
+    reset = "reset"
+    brightness = "brightness"
+    color = "color"
+
+
+# --------------------------
+# Async Page Lifecycle Context Manager
+# --------------------------
+@asynccontextmanager
+async def get_page(
+    url: str, headless: bool = True, viewport: Tuple[int, int] = (500, 500)
+):
     """
-    Wait for the app to load by checking the screenshot.
-    
-    The loading screen is mostly white, so wait until less than 50% of pixels are white.
+    Async context manager that launches Playwright, opens a new page to the given URL,
+    and ensures the browser is closed upon exit.
+    """
+    print(f"Connecting to {url}")
+    async with async_playwright() as playwright:
+        browser = await playwright.chromium.launch(headless=headless)
+        context = await browser.new_context(
+            viewport={"width": viewport[0], "height": viewport[1]}
+        )
+        page = await context.new_page()
+        try:
+            await page.goto(url, timeout=10000)  # 10 second timeout
+            yield page
+        finally:
+            await browser.close()
+
+
+# --------------------------
+# Utility Functions
+# --------------------------
+async def get_screen(page) -> np.ndarray:
+    """
+    Capture a screenshot of the page and return it as an RGB NumPy array.
+    """
+    png = await page.screenshot()
+    im = Image.open(BytesIO(png))
+    return np.asarray(im, dtype=np.uint8)[:, :, :3]  # Drop alpha channel if present
+
+
+async def wait_for_page(page):
+    """
+    Wait for the page to load by checking that the mostly white loading screen has cleared.
     """
     white_fraction = 1.0
     print("Waiting for page to load...", end="")
     while white_fraction > 0.5:
-        screen = get_screen(page)
+        screen = await get_screen(page)
         white_fraction = (screen.mean(axis=2) == 255).mean()
         sys.stdout.write(".")
         sys.stdout.flush()
-        time.sleep(0.1)
-    print("ok")
+        await asyncio.sleep(0.1)
+    print(" ok")
 
-def click_location(page, location_name: str, index: Optional[int] = None):
-    """Click a given location on the app using relative coordinates."""
-    canvas = page.query_selector("#foreground")
+
+async def click_location(page, location_name: str, index: Optional[int] = None):
+    """
+    Find the canvas with id 'foreground', compute the absolute click coordinates based on relative
+    percentages, and perform a click.
+    """
+    canvas = await page.query_selector("#foreground")
     if not canvas:
         print("Could not find the canvas element with id 'foreground'")
         return
-    bounding_box = canvas.bounding_box()
+    bounding_box = await canvas.bounding_box()
     if not bounding_box:
-        print("Could not get bounding box of the canvas element")
+        print("Could not retrieve bounding box for the canvas element")
         return
 
     width = bounding_box["width"]
@@ -98,41 +114,43 @@ def click_location(page, location_name: str, index: Optional[int] = None):
         loc_percent = loc_percent[index]
         name = f"{location_name}:{index}"
     elif isinstance(loc_percent, list):
-        # default to the middle option
+        # Default to the middle option if no index is provided
         loc_percent = loc_percent[2]
+
+    # Compute absolute x, y based on bounding box and relative percentages
     x = bounding_box["x"] + loc_percent[0] * width
     y = bounding_box["y"] + loc_percent[1] * height
 
-    print(f"Clicking {name} (location percentages: {loc_percent})")
-    page.mouse.click(x, y)
+    print(f"Clicking {name} (relative position: {loc_percent})")
+    await page.mouse.click(x, y)
 
-class Operation(str, Enum):
-    reset = "reset"
-    brightness = "brightness"
-    color = "color"
+async def async_lights(
+    room: int, button: Operation = Operation.reset, index: Optional[int] = None
+):
+    """
+    Open the light control page for the specified room, wait for the app to load,
+    and click the specified button.
+    """
+    url = room_url(room)
+    try:
+        async with get_page(url, headless=True) as page:
+            await wait_for_page(page)
+            await click_location(page, button, index)
+            # Allow time for the event to register
+            await asyncio.sleep(1)
+    except (TimeoutError, Error) as e:
+        print("An error occurred:", e)
+        raise
+
 
 app = typer.Typer()
 
+
 @app.command()
 def lights(
-    room: int,
-    button: Operation = Operation.reset,
-    index: Optional[int] = None,
+    room: int, button: Operation = Operation.reset, index: Optional[int] = None
 ):
-    """
-    Interact with the lights for ROOM.
-
-    If only the room number is specified, the brightness reset button is chosen.
-    For multi-value buttons (e.g. brightness, color), an INDEX [0-4] can select which button.
-    """
-    page, browser, playwright = setup_page(room_url(room))
-    wait_for_page(page)
-    click_location(page, button, index)
-    # Allow time for the event to register before closing
-    time.sleep(1)
-    browser.close()
-    playwright.stop()
+    asyncio.run(async_lights(room, button, index))
 
 if __name__ == "__main__":
     app()
-
